@@ -644,12 +644,6 @@
                 </div>
             </div>
             
-            <div class="overs-display">
-                Current Over: <span id="currentOver">0.0</span> | 
-                Bowler: <span id="currentBowler">None</span> |
-                <button id="changeBowler" class="info">Change Bowler</button>
-            </div>
-            
             <table class="batsmen-table">
                 <thead>
                     <tr>
@@ -677,6 +671,17 @@
                 <button id="changeNonStrikerBtn" class="warning">Change Non‑Striker</button>
                 <button id="replaceBatsmanBtn" class="secondary">Replace Batsman</button>
             </div>
+
+            <h3>Current Over &amp; Ball-by-Ball</h3>
+            <div class="ball-by-ball" id="ballCommentary">
+                <div class="overs-display">
+                    Current Over: <span id="currentOver">0.0</span> | 
+                    Bowler: <span id="currentBowler">None</span> |
+                    <button id="changeBowler" class="info">Change Bowler</button>
+                </div>
+                <div class="innings-commentary active" id="innings1Commentary"></div>
+                <div class="innings-commentary" id="innings2Commentary"></div>
+            </div>
             
             <h3>Record Ball</h3>
             <div class="ball-controls">
@@ -698,12 +703,6 @@
             <div class="innings-tabs">
                 <button class="innings-tab active" data-innings="1">Innings 1</button>
                 <button class="innings-tab" data-innings="2">Innings 2</button>
-            </div>
-            
-            <h3>Ball-by-Ball Commentary</h3>
-            <div class="ball-by-ball" id="ballCommentary">
-                <div class="innings-commentary active" id="innings1Commentary"></div>
-                <div class="innings-commentary" id="innings2Commentary"></div>
             </div>
             
             <div class="btn-group">
@@ -1579,6 +1578,16 @@
             matchState.battingTeam = 2;
             showInningsStartModal('Start Innings 2');
             targetInfo.classList.remove('hidden');
+
+            // Automatically focus UI on second innings
+            switchInningsTab('2');
+            // Reset batsmen and bowler display for new innings context
+            matchState.striker = { name: '', runs: 0, balls: 0, fours: 0, sixes: 0, out: false };
+            matchState.nonStriker = { name: '', runs: 0, balls: 0, fours: 0, sixes: 0, out: false };
+            matchState.currentBowler = { name: 'None', overs: 0, maidens: 0, runs: 0, wickets: 0 };
+            updateBatsmenDisplay();
+            updateBowlerDisplay();
+            updateScoreboard();
         }
         
         // Update scoreboard UI
@@ -1628,12 +1637,8 @@
             updateInningsCommentary('innings2Commentary', matchState.team2.ballHistory);
         }
         
-        // Update innings commentary
-        function updateInningsCommentary(elementId, ballHistory) {
-            const commentaryDiv = document.getElementById(elementId);
-            commentaryDiv.innerHTML = '';
-            
-            // Group balls by over
+        // Group balls by over into a plain object
+        function groupBallsByOver(ballHistory) {
             const overs = {};
             ballHistory.forEach(ball => {
                 const overKey = Math.floor(ball.over);
@@ -1642,11 +1647,20 @@
                 }
                 overs[overKey].push(ball);
             });
+            return overs;
+        }
+
+        // Update innings commentary (UI component)
+        function updateInningsCommentary(elementId, ballHistory) {
+            const commentaryDiv = document.getElementById(elementId);
+            commentaryDiv.innerHTML = '';
+            
+            const overs = groupBallsByOver(ballHistory);
             
             // Create over elements (reverse order to show current over at top)
             const overKeys = Object.keys(overs).sort((a, b) => b - a);
             
-            overKeys.forEach(overNum => {
+            overKeys.forEach((overNum, index) => {
                 const overDiv = document.createElement('div');
                 overDiv.className = 'over';
                 overDiv.id = `${elementId}-over-${overNum}`;
@@ -1667,7 +1681,13 @@
                 
                 const ballsDiv = document.createElement('div');
                 ballsDiv.className = 'over-content';
-                ballsDiv.style.display = 'none';
+
+                // Current over (latest) expanded by default, previous overs collapsed
+                const isCurrentOver = index === 0;
+                ballsDiv.style.display = isCurrentOver ? 'grid' : 'none';
+                if (isCurrentOver) {
+                    overHeader.querySelector('span:last-child').textContent = '▲';
+                }
                 
                 overs[overNum].forEach(ball => {
                     const ballSpan = document.createElement('span');
@@ -1974,6 +1994,59 @@
             });
             
             html += `</table>`;
+
+            // Ball-by-ball sections for both innings
+            const buildBallByBallSection = (title, ballHistory) => {
+                const overs = groupBallsByOver(ballHistory);
+                const overKeys = Object.keys(overs).sort((a, b) => a - b);
+                if (overKeys.length === 0) return '';
+
+                let section = `
+                    <div class="summary-title" style="margin-top:20px;">${title}</div>
+                    <table class="team-stats">
+                        <tr>
+                            <th>Over</th>
+                            <th>Bowler</th>
+                            <th>Balls</th>
+                        </tr>
+                `;
+
+                overKeys.forEach(overNum => {
+                    const overBalls = overs[overNum];
+                    const bowlerName = overBalls[0].bowler;
+                    const ballsText = overBalls.map(b => {
+                        switch(b.result) {
+                            case '0': return '•';
+                            case '1': return '1';
+                            case '2': return '2';
+                            case '3': return '3';
+                            case '4': return '4';
+                            case '6': return '6';
+                            case 'wicket': return 'W';
+                            case 'wicketRun1': return 'W+1';
+                            case 'wicketRun2': return 'W+2';
+                            case 'wicketRun3': return 'W+3';
+                            case 'wide': return 'WD';
+                            case 'noBall': return 'NB';
+                            default: return b.result;
+                        }
+                    }).join(' ');
+
+                    section += `
+                        <tr>
+                            <td>${parseInt(overNum, 10) + 1}</td>
+                            <td>${bowlerName}</td>
+                            <td>${ballsText}</td>
+                        </tr>
+                    `;
+                });
+
+                section += `</table>`;
+                return section;
+            };
+
+            html += buildBallByBallSection('📝 Ball-by-Ball – Innings 1', matchState.team1.ballHistory);
+            html += buildBallByBallSection('📝 Ball-by-Ball – Innings 2', matchState.team2.ballHistory);
             
             statsDiv.innerHTML = html;
             
@@ -2203,6 +2276,51 @@
             
             // Remove winner flags
             document.querySelectorAll('.winner-flag').forEach(flag => flag.remove());
+
+            // Reset scoreboard and titles
+            document.getElementById('matchTitle').textContent = '';
+            document.getElementById('team1Display').textContent = '';
+            document.getElementById('team2Display').textContent = '';
+            document.getElementById('team1Score').textContent = '0';
+            document.getElementById('team1Wickets').textContent = '0';
+            document.getElementById('team1Overs').textContent = '0.0';
+            document.getElementById('team2Score').textContent = '0';
+            document.getElementById('team2Wickets').textContent = '0';
+            document.getElementById('team2Overs').textContent = '0.0';
+
+            // Reset batsmen display
+            document.getElementById('strikerName').textContent = 'Not set';
+            document.getElementById('strikerRuns').textContent = '0';
+            document.getElementById('strikerBalls').textContent = '0';
+            document.getElementById('nonStrikerName').textContent = 'Not set';
+            document.getElementById('nonStrikerRuns').textContent = '0';
+            document.getElementById('nonStrikerBalls').textContent = '0';
+
+            // Reset current over and bowler
+            document.getElementById('currentOver').textContent = '0.0';
+            document.getElementById('currentBowler').textContent = 'None (0-0-0-0)';
+
+            // Clear commentary and stats sections
+            document.getElementById('innings1Commentary').innerHTML = '';
+            document.getElementById('innings2Commentary').innerHTML = '';
+            document.getElementById('battingStats').innerHTML = '';
+            document.getElementById('detailedStats').innerHTML = '';
+
+            // Reset header
+            headerTeam1Name.textContent = 'Team 1';
+            headerTeam2Name.textContent = 'Team 2';
+            headerTeam1Score.textContent = '0/0 (0.0)';
+            headerTeam2Score.textContent = '0/0 (0.0)';
+            headerMatchStatus.textContent = 'Not started';
+
+            // Reset target info
+            targetInfo.classList.add('hidden');
+            document.getElementById('targetRuns').textContent = '0';
+            const requiredEl = document.getElementById('requiredRuns');
+            requiredEl.textContent = '0';
+            requiredEl.style.color = 'inherit';
+            document.getElementById('remainingBalls').textContent = '0';
+            document.getElementById('requiredRunRate').textContent = '0';
 
             updateHeader();
         }
