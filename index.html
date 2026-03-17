@@ -741,7 +741,11 @@
         <section id="statsView" class="app-section hidden">
             <h2>Detailed Statistics</h2>
             <div id="detailedStats"></div>
-            <button id="backToSummaryBtn" class="primary">← Back to Summary</button>
+            <div class="summary-buttons">
+                <button id="saveStatsScreenshotBtn" class="primary">Save Screenshot</button>
+                <button id="shareStatsScreenshotBtn" class="info">Share Screenshot</button>
+                <button id="backToSummaryBtn" class="primary">← Back to Summary</button>
+            </div>
         </section>
     </div>
 
@@ -807,17 +811,23 @@
     <div class="modal" id="matchShareModal">
         <div class="modal-content">
             <h3>Send Match Status</h3>
-            <p>You can save or share the current match summary.</p>
-            <div class="modal-buttons" style="justify-content: space-between;">
+            <p>You can save or share the current match summary as TXT or Screenshots.</p>
+            <div class="modal-buttons" style="justify-content: space-between; flex-wrap: wrap;">
                 <button class="secondary" id="shareCloseBtn">Close</button>
-                <button class="info" id="shareEmailBtn">Send Email</button>
-                <button class="primary" id="shareSaveBtn">Save Locally</button>
+                <button class="info" id="shareTxtBtn">Share TXT</button>
+                <button class="info" id="shareStatsScreenshotBtn">Share Screenshot</button>
+                <button class="primary" id="saveTxtBtn">Save TXT</button>
+                <button class="primary" id="saveStatsScreenshotBtn">Save Screenshot</button>
                 <button class="danger" id="shareResetBtn">Reset Match</button>
             </div>
         </div>
     </div>
 
     <div id="toast" class="toast">Match reset. Ready for a new match.</div>
+
+    <!-- Add jsPDF for PDF generation and html2canvas for screenshots -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <script>
         // Match state
@@ -899,12 +909,16 @@
         const statsReviewBtn = document.getElementById('statsReviewBtn');
         const nextMatchBtn = document.getElementById('nextMatchBtn');
         const backToSummaryBtn = document.getElementById('backToSummaryBtn');
+        const saveStatsScreenshotBtn = document.getElementById('saveStatsScreenshotBtn');
+        const shareStatsScreenshotBtn = document.getElementById('shareStatsScreenshotBtn');
         const sendStatusBtn = document.getElementById('sendStatusBtn');
         const matchShareModal = document.getElementById('matchShareModal');
         const shareSaveBtn = document.getElementById('shareSaveBtn');
         const shareEmailBtn = document.getElementById('shareEmailBtn');
         const shareCloseBtn = document.getElementById('shareCloseBtn');
         const shareResetBtn = document.getElementById('shareResetBtn');
+        const shareTxtBtn = document.getElementById('shareTxtBtn');
+        const saveTxtBtn = document.getElementById('saveTxtBtn');
         const toast = document.getElementById('toast');
         const headerTeam1Name = document.getElementById('headerTeam1Name');
         const headerTeam2Name = document.getElementById('headerTeam2Name');
@@ -975,34 +989,38 @@
 
             // Batting stats
             summary += `${t1.name || 'Team 1'} Batting:\n`;
+            summary += 'Batsman\tRuns\tBalls\t4s\t6s\tSR\n';
             t1.players.forEach(player => {
                 const strikeRate = player.balls > 0 ? (player.runs / player.balls * 100).toFixed(2) : '0.00';
-                summary += `${player.name}: ${player.runs} (${player.balls}) 4s:${player.fours} 6s:${player.sixes} SR:${strikeRate}\n`;
+                summary += `${player.name}\t${player.runs}\t${player.balls}\t${player.fours}\t${player.sixes}\t${strikeRate}\n`;
             });
             summary += '\n';
 
             if (t2.players.length > 0) {
                 summary += `${t2.name || 'Team 2'} Batting:\n`;
+                summary += 'Batsman\tRuns\tBalls\t4s\t6s\tSR\n';
                 t2.players.forEach(player => {
                     const strikeRate = player.balls > 0 ? (player.runs / player.balls * 100).toFixed(2) : '0.00';
-                    summary += `${player.name}: ${player.runs} (${player.balls}) 4s:${player.fours} 6s:${player.sixes} SR:${strikeRate}\n`;
+                    summary += `${player.name}\t${player.runs}\t${player.balls}\t${player.fours}\t${player.sixes}\t${strikeRate}\n`;
                 });
                 summary += '\n';
             }
 
             // Bowling stats
             summary += `${t2.name || 'Team 2'} Bowling:\n`;
+            summary += 'Bowler\tO\tM\tR\tW\tEcon\n';
             t2.bowlers.forEach(bowler => {
                 const economy = bowler.overs > 0 ? (bowler.runs / bowler.overs).toFixed(2) : '0.00';
-                summary += `${bowler.name}: ${bowler.overs}-${bowler.maidens}-${bowler.runs}-${bowler.wickets} Econ:${economy}\n`;
+                summary += `${bowler.name}\t${bowler.overs}\t${bowler.maidens}\t${bowler.runs}\t${bowler.wickets}\t${economy}\n`;
             });
             summary += '\n';
 
             if (t1.bowlers.length > 0) {
                 summary += `${t1.name || 'Team 1'} Bowling:\n`;
+                summary += 'Bowler\tO\tM\tR\tW\tEcon\n';
                 t1.bowlers.forEach(bowler => {
                     const economy = bowler.overs > 0 ? (bowler.runs / bowler.overs).toFixed(2) : '0.00';
-                    summary += `${bowler.name}: ${bowler.overs}-${bowler.maidens}-${bowler.runs}-${bowler.wickets} Econ:${economy}\n`;
+                    summary += `${bowler.name}\t${bowler.overs}\t${bowler.maidens}\t${bowler.runs}\t${bowler.wickets}\t${economy}\n`;
                 });
                 summary += '\n';
             }
@@ -1104,10 +1122,35 @@
         function handleShareSave() {
             const summary = getMatchSummaryText();
             const blob = new Blob([summary], { type: 'text/plain' });
+            const file = new File([blob], getFileName('txt'), { type: 'text/plain' });
+            shareFile(file, getFileName('txt'), 'Match Summary TXT');
+        }
+
+        function handleSharePDF() {
+            const pdfBlob = generatePDF();
+            const file = new File([pdfBlob], getFileName('pdf'), { type: 'application/pdf' });
+            shareFile(file, getFileName('pdf'), 'Match Summary PDF');
+        }
+
+        function handleSaveTXT() {
+            const summary = getMatchSummaryText();
+            const blob = new Blob([summary], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'match-summary.txt';
+            a.download = getFileName('txt');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function handleSavePDF() {
+            const pdfBlob = generatePDF();
+            const url = URL.createObjectURL(pdfBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = getFileName('pdf');
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1120,6 +1163,271 @@
             const subject = encodeURIComponent(`Match Status: ${t1Name} vs ${t2Name}`);
             const body = encodeURIComponent(getMatchSummaryText());
             window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        }
+
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const t1 = matchState.team1;
+            const t2 = matchState.team2;
+            const t1Overs = (t1.overs || 0).toFixed(1);
+            const t2Overs = (t2.overs || 0).toFixed(1);
+
+            // Page 1: Match Summary
+            doc.setFontSize(16);
+            doc.text('Match Summary', 10, 20);
+            doc.setFontSize(12);
+            doc.text(`Match: ${t1.name || 'Team 1'} vs ${t2.name || 'Team 2'}`, 10, 40);
+            doc.text(`Overs: ${matchState.totalOvers}`, 10, 50);
+            doc.text(`${t1.name || 'Team 1'}: ${t1.score}/${t1.wickets} in ${t1Overs} overs`, 10, 60);
+            doc.text(`${t2.name || 'Team 2'}: ${t2.score}/${t2.wickets} in ${t2Overs} overs`, 10, 70);
+
+            if (matchState.matchEnded) {
+                let result = '';
+                if (t1.score > t2.score) {
+                    const margin = t1.score - t2.score;
+                    result = `Result: ${t1.name || 'Team 1'} won by ${margin} runs`;
+                } else if (t2.score > t1.score) {
+                    const wicketsLeft = 10 - t2.wickets;
+                    result = `Result: ${t2.name || 'Team 2'} won by ${wicketsLeft} wickets`;
+                } else {
+                    result = 'Result: Match tied';
+                }
+                doc.text(result, 10, 80);
+            }
+
+            // Page 2: Batting Stats
+            doc.addPage();
+            doc.setFontSize(16);
+            doc.text('Batting Statistics', 10, 20);
+            doc.setFontSize(12);
+            let y = 40;
+
+            // Team 1 Batting
+            doc.text(`${t1.name || 'Team 1'} Batting`, 10, y);
+            y += 10;
+            doc.text('Batsman\tRuns\tBalls\t4s\t6s\tSR', 10, y);
+            y += 10;
+            t1.players.forEach(player => {
+                const strikeRate = player.balls > 0 ? (player.runs / player.balls * 100).toFixed(2) : '0.00';
+                doc.text(`${player.name}\t${player.runs}\t${player.balls}\t${player.fours}\t${player.sixes}\t${strikeRate}`, 10, y);
+                y += 10;
+            });
+            y += 10;
+
+            if (t2.players.length > 0) {
+                doc.text(`${t2.name || 'Team 2'} Batting`, 10, y);
+                y += 10;
+                doc.text('Batsman\tRuns\tBalls\t4s\t6s\tSR', 10, y);
+                y += 10;
+                t2.players.forEach(player => {
+                    const strikeRate = player.balls > 0 ? (player.runs / player.balls * 100).toFixed(2) : '0.00';
+                    doc.text(`${player.name}\t${player.runs}\t${player.balls}\t${player.fours}\t${player.sixes}\t${strikeRate}`, 10, y);
+                    y += 10;
+                });
+            }
+
+            // Page 3: Bowling Stats
+            doc.addPage();
+            doc.setFontSize(16);
+            doc.text('Bowling Statistics', 10, 20);
+            doc.setFontSize(12);
+            y = 40;
+
+            doc.text(`${t2.name || 'Team 2'} Bowling`, 10, y);
+            y += 10;
+            doc.text('Bowler\tO\tM\tR\tW\tEcon', 10, y);
+            y += 10;
+            t2.bowlers.forEach(bowler => {
+                const economy = bowler.overs > 0 ? (bowler.runs / bowler.overs).toFixed(2) : '0.00';
+                doc.text(`${bowler.name}\t${bowler.overs}\t${bowler.maidens}\t${bowler.runs}\t${bowler.wickets}\t${economy}`, 10, y);
+                y += 10;
+            });
+            y += 10;
+
+            if (t1.bowlers.length > 0) {
+                doc.text(`${t1.name || 'Team 1'} Bowling`, 10, y);
+                y += 10;
+                doc.text('Bowler\tO\tM\tR\tW\tEcon', 10, y);
+                y += 10;
+                t1.bowlers.forEach(bowler => {
+                    const economy = bowler.overs > 0 ? (bowler.runs / bowler.overs).toFixed(2) : '0.00';
+                    doc.text(`${bowler.name}\t${bowler.overs}\t${bowler.maidens}\t${bowler.runs}\t${bowler.wickets}\t${economy}`, 10, y);
+                    y += 10;
+                });
+            }
+
+            // Page 4+: Ball-by-ball
+            if (t1.ballHistory.length > 0) {
+                doc.addPage();
+                doc.setFontSize(16);
+                doc.text(`${t1.name || 'Team 1'} Ball-by-Ball`, 10, 20);
+                doc.setFontSize(12);
+                y = 40;
+                const overs = groupBallsByOver(t1.ballHistory);
+                const overKeys = Object.keys(overs).sort((a, b) => a - b);
+                overKeys.forEach(overNum => {
+                    if (y > 250) {
+                        doc.addPage();
+                        y = 20;
+                    }
+                    const overBalls = overs[overNum];
+                    const bowlerName = overBalls[0].bowler;
+                    const ballsText = overBalls.map(b => {
+                        if (b.result === '0') return '•';
+                        else if (b.result === '1') return '1';
+                        else if (b.result === '2') return '2';
+                        else if (b.result === '3') return '3';
+                        else if (b.result === '4') return '4';
+                        else if (b.result === '6') return '6';
+                        else if (b.result === 'wicket') return 'W';
+                        else if (b.result.startsWith('wicketPlus:')) {
+                            const parts = b.result.split(':');
+                            return 'W+' + parts[2];
+                        }
+                        else if (b.result === 'wide') return 'WD';
+                        else if (b.result.startsWith('widePlus:')) {
+                            const runs = b.result.split(':')[1];
+                            return 'WD+' + runs;
+                        }
+                        else if (b.result === 'noBall') return 'NB';
+                        else if (b.result.startsWith('noBallPlus:')) {
+                            const runs = b.result.split(':')[1];
+                            return 'NB+' + runs;
+                        }
+                        else return b.result;
+                    }).join(' ');
+                    doc.text(`Over ${parseInt(overNum, 10) + 1} (${bowlerName}): ${ballsText}`, 10, y);
+                    y += 10;
+                });
+            }
+
+            if (t2.ballHistory.length > 0) {
+                doc.addPage();
+                doc.setFontSize(16);
+                doc.text(`${t2.name || 'Team 2'} Ball-by-Ball`, 10, 20);
+                doc.setFontSize(12);
+                y = 40;
+                const overs = groupBallsByOver(t2.ballHistory);
+                const overKeys = Object.keys(overs).sort((a, b) => a - b);
+                overKeys.forEach(overNum => {
+                    if (y > 250) {
+                        doc.addPage();
+                        y = 20;
+                    }
+                    const overBalls = overs[overNum];
+                    const bowlerName = overBalls[0].bowler;
+                    const ballsText = overBalls.map(b => {
+                        if (b.result === '0') return '•';
+                        else if (b.result === '1') return '1';
+                        else if (b.result === '2') return '2';
+                        else if (b.result === '3') return '3';
+                        else if (b.result === '4') return '4';
+                        else if (b.result === '6') return '6';
+                        else if (b.result === 'wicket') return 'W';
+                        else if (b.result.startsWith('wicketPlus:')) {
+                            const parts = b.result.split(':');
+                            return 'W+' + parts[2];
+                        }
+                        else if (b.result === 'wide') return 'WD';
+                        else if (b.result.startsWith('widePlus:')) {
+                            const runs = b.result.split(':')[1];
+                            return 'WD+' + runs;
+                        }
+                        else if (b.result === 'noBall') return 'NB';
+                        else if (b.result.startsWith('noBallPlus:')) {
+                            const runs = b.result.split(':')[1];
+                            return 'NB+' + runs;
+                        }
+                        else return b.result;
+                    }).join(' ');
+                    doc.text(`Over ${parseInt(overNum, 10) + 1} (${bowlerName}): ${ballsText}`, 10, y);
+                    y += 10;
+                });
+            }
+
+            return doc.output('blob');
+        }
+
+        async function captureStatsScreenshot() {
+            const statsElement = document.getElementById('detailedStats');
+            if (!statsElement) {
+                alert('Detailed Statistics not found. Please ensure the stats view is loaded.');
+                return null;
+            }
+
+            try {
+                // Capture the element as canvas
+                const canvas = await html2canvas(statsElement, {
+                    backgroundColor: '#ffffff', // White background for better readability
+                    scale: 2, // Higher resolution (adjust as needed for quality vs. file size)
+                    useCORS: true, // Handle cross-origin images if any
+                });
+
+                // Convert canvas to blob (PNG format)
+                return new Promise((resolve) => {
+                    canvas.toBlob((blob) => {
+                        resolve(blob);
+                    }, 'image/png');
+                });
+            } catch (error) {
+                console.error('Screenshot capture failed:', error);
+                alert('Failed to capture screenshot. Please try again.');
+                return null;
+            }
+        }
+
+        async function handleSaveStatsScreenshot() {
+            const blob = await captureStatsScreenshot();
+            if (!blob) return;
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = getFileName('png'); // Reuse your timestamp function
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Screenshot saved!');
+        }
+
+        async function handleShareStatsScreenshot() {
+            const blob = await captureStatsScreenshot();
+            if (!blob) return;
+
+            const file = new File([blob], getFileName('png'), { type: 'image/png' });
+            shareFile(file, getFileName('png'), 'Match Statistics Screenshot');
+        }
+
+        function getFileName(extension) {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            return `${year}${month}${day}${hours}${minutes}${seconds}.${extension}`;
+        }
+
+        function shareFile(file, filename, title) {
+            if (navigator.share && navigator.canShare({ files: [file] })) {
+                navigator.share({
+                    title: title,
+                    files: [file]
+                }).catch(console.error);
+            } else {
+                // Fallback: download
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
         }
 
         function handleShareReset() {
@@ -1150,6 +1458,14 @@
                 summaryView.classList.remove('hidden');
             });
 
+            if (saveStatsScreenshotBtn) {
+                saveStatsScreenshotBtn.addEventListener('click', handleSaveStatsScreenshot);
+            }
+
+            if (shareStatsScreenshotBtn) {
+                shareStatsScreenshotBtn.addEventListener('click', handleShareStatsScreenshot);
+            }
+
             if (sendStatusBtn) {
                 sendStatusBtn.addEventListener('click', () => openShareModal(false));
             }
@@ -1162,12 +1478,33 @@
                 shareEmailBtn.addEventListener('click', handleShareEmail);
             }
 
+            if (shareTxtBtn) {
+                shareTxtBtn.addEventListener('click', () => {
+                    const summary = getMatchSummaryText();
+                    const blob = new Blob([summary], { type: 'text/plain' });
+                    const file = new File([blob], 'match-summary.txt', { type: 'text/plain' });
+                    shareFile(file, 'match-summary.txt', 'Match Summary TXT');
+                });
+            }
+
+            if (shareStatsScreenshotBtn) {
+                shareStatsScreenshotBtn.addEventListener('click', handleShareStatsScreenshot);
+            }
+
+            if (saveTxtBtn) {
+                saveTxtBtn.addEventListener('click', handleSaveTXT);
+            }
+
+            if (saveStatsScreenshotBtn) {
+                saveStatsScreenshotBtn.addEventListener('click', handleSaveStatsScreenshot);
+            }
+
             if (shareCloseBtn) {
                 shareCloseBtn.addEventListener('click', () => {
                     closeShareModal();
-                    if (matchState.shareFlowNewMatch) {
-                        handleShareReset();
-                    }
+                    statsView.classList.remove('hidden');
+                    matchView.classList.add('hidden');
+                    summaryView.classList.add('hidden');
                 });
             }
 
@@ -2042,11 +2379,47 @@
             }
         }
         
+        // Generate match summary HTML
+        function getMatchSummaryHTML() {
+            const t1 = matchState.team1;
+            const t2 = matchState.team2;
+            const t1Overs = (t1.overs || 0).toFixed(1);
+            const t2Overs = (t2.overs || 0).toFixed(1);
+
+            let html = `
+                <div class="summary-card">
+                    <div class="summary-title">📊 Match Summary</div>
+                    <p><strong>Match:</strong> ${t1.name || 'Team 1'} vs ${t2.name || 'Team 2'}</p>
+                    <p><strong>Overs:</strong> ${matchState.totalOvers}</p>
+                    <p><strong>${t1.name || 'Team 1'}:</strong> ${t1.score}/${t1.wickets} in ${t1Overs} overs</p>
+                    <p><strong>${t2.name || 'Team 2'}:</strong> ${t2.score}/${t2.wickets} in ${t2Overs} overs</p>
+            `;
+
+            if (matchState.matchEnded) {
+                let result = '';
+                if (t1.score > t2.score) {
+                    const margin = t1.score - t2.score;
+                    result = `${t1.name || 'Team 1'} won by ${margin} runs`;
+                } else if (t2.score > t1.score) {
+                    const wicketsLeft = 10 - t2.wickets;
+                    result = `${t2.name || 'Team 2'} won by ${wicketsLeft} wickets`;
+                } else {
+                    result = 'Match tied';
+                }
+                html += `<p><strong>Result:</strong> ${result}</p>`;
+            } else {
+                html += `<p><strong>Status:</strong> Match in progress</p>`;
+            }
+
+            html += `</div>`;
+            return html;
+        }
+        
         // Show stats review
         function showStatsReview() {
             const statsDiv = document.getElementById('detailedStats');
             
-            let html = `
+            let html = getMatchSummaryHTML() + `
                 <div class="summary-card">
                     <div class="summary-title">🏏 ${matchState.team1.name} Batting</div>
                     <table class="team-stats">
