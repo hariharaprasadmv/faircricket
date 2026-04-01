@@ -752,9 +752,9 @@
             <button id="startMatch" class="primary">Start Match</button>
         </section>
         
-        <section id="knownIssuesSection" class="app-section">
-            <h2>Known Issues & Work-arounds</h2>
-            <ul style="line-height: 1.8; margin: 12px 0; padding-left: 20px;">
+        <section id="knownIssuesSection" class="app-section" style="padding: 10px 15px;">
+            <p style="font-size: 11px; font-weight: 600; color: #999; margin-bottom: 6px;">Known Issues & Work-arounds</p>
+            <ul style="line-height: 1.5; margin: 0; padding-left: 16px; font-size: 11px; color: #aaa;">
                 <li><strong>W+</strong> — Where wicket plus run couldn't be added. For now add a W and add Extras like WD to match the current match score.</li>
                 <li><strong>NB+ & WD+</strong> — Logic not working.</li>
                 <li><strong>Swap or Change Striker/Non-Striker</strong> — Use these buttons based on your match progress.</li>
@@ -849,12 +849,6 @@
                 </tbody>
             </table>
             
-            <div class="batsmen-actions">
-                <button id="swapBatsmenBtn" class="secondary">Swap Batsman</button>
-                <button id="changeStrikerBtn" class="warning">Change Striker</button>
-                <button id="changeNonStrikerBtn" class="warning">Change Non‑Striker</button>
-                <button id="changeBowler" class="info">Change Bowler</button>
-            </div>
         </section>
         
         <section id="recordingSection" class="app-section hidden">
@@ -902,6 +896,10 @@
                 <button class="ball-btn secondary" data-runs="noBall">NB</button>
                 <button class="ball-btn secondary" id="noBallPlusBtn">NB+</button>
                 <button class="ball-btn info" id="undoBtn">Undo Last Ball</button>
+                <button class="ball-btn secondary" id="swapBatsmenBtn">Swap Batsman</button>
+                <button class="ball-btn warning" id="changeStrikerBtn">Change Striker</button>
+                <button class="ball-btn warning" id="changeNonStrikerBtn">Change Non‑Striker</button>
+                <button class="ball-btn info" id="changeBowler">Change Bowler</button>
             </div>
             
             <div class="innings-tabs">
@@ -2957,6 +2955,7 @@
             };
 
             html += buildBallByBallSection('📝 Ball-by-Ball – Innings 1', matchState.team1.ballHistory);
+            html += `</div>`; // close Innings 1 summary-card
             
             // Second team batting
             html += `
@@ -3019,6 +3018,7 @@
             html += `</table>`;
 
             html += buildBallByBallSection('📝 Ball-by-Ball – Innings 2', matchState.team2.ballHistory);
+            html += `</div>`; // close Innings 2 summary-card
             
             statsDiv.innerHTML = html;
             
